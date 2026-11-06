@@ -1,0 +1,226 @@
+# Regras de alerta do Grafana (provisionadas na subida).
+apiVersion: 1
+groups:
+- orgId: 1
+  name: infraestrutura
+  folder: Alertas
+  interval: 1m
+  rules:
+  - uid: servidor-sem-dados
+    title: Servidor parou de mandar dados
+    condition: C
+    for: 2m
+    noDataState: OK
+    execErrState: Error
+    labels:
+      severidade: alta
+    annotations:
+      summary: O servidor parou de mandar métricas há mais de 3 minutos (desligado, sem rede ou agente parado)
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max by (servidor) (max_over_time(up{job="host"}[1h])) unless max by (servidor) (max_over_time(up{job="host"}[3m]))
+        instant: true
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+  - uid: disco-cheio
+    title: Disco quase cheio
+    condition: C
+    for: 10m
+    noDataState: OK
+    execErrState: Error
+    labels:
+      severidade: alta
+    annotations:
+      summary: Disco {{ $labels.mountpoint }} com {{ humanize $values.A.Value }}% usado
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max by (servidor, mountpoint) (100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}))
+        instant: true
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 85
+  - uid: memoria-alta
+    title: Memória alta
+    condition: C
+    for: 10m
+    noDataState: OK
+    execErrState: Error
+    labels:
+      severidade: alta
+    annotations:
+      summary: Memória em {{ humanize $values.A.Value }}%
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max by (servidor) (100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))
+        instant: true
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 90
+  - uid: cpu-alta
+    title: CPU alta
+    condition: C
+    for: 15m
+    noDataState: OK
+    execErrState: Error
+    labels:
+      severidade: media
+    annotations:
+      summary: CPU acima de 90% há 15 minutos ({{ humanize $values.A.Value }}%)
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max by (servidor) (100 * (1 - avg by (servidor) (rate(node_cpu_seconds_total{mode="idle"}[5m]))))
+        instant: true
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 90
+  - uid: container-sumiu
+    title: Container sumiu
+    condition: C
+    for: 3m
+    noDataState: OK
+    execErrState: Error
+    labels:
+      severidade: alta
+    annotations:
+      summary: O container {{ $labels.name }} estava rodando e sumiu (parado ou removido)
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: count by (servidor, name) (max_over_time(container_last_seen{name!=""}[1h])) unless count by (servidor, name) (max_over_time(container_last_seen{name!=""}[3m]))
+        instant: true
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+  - uid: erros-5xx
+    title: Muitos erros 5xx
+    condition: C
+    for: 0s
+    noDataState: OK
+    execErrState: Error
+    labels:
+      severidade: media
+    annotations:
+      summary: '{{ humanize $values.A.Value }} respostas 5xx em 5 min no {{ $labels.container }}'
+    data:
+    - refId: A
+      datasourceUid: loki
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: sum by (servidor, container) (count_over_time({status=~"5.."}[5m]))
+        instant: true
+        queryType: instant
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 20
+  - uid: crowdsec-parado
+    title: CrowdSec sem dados
+    condition: C
+    for: 5m
+    noDataState: OK
+    execErrState: Error
+    labels:
+      severidade: media
+    annotations:
+      summary: O CrowdSec parou de responder
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max by (servidor) (max_over_time(up{job="crowdsec"}[1h])) unless max by (servidor) (max_over_time(up{job="crowdsec"}[5m]) == 1)
+        instant: true
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0

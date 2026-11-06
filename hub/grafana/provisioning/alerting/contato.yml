@@ -1,0 +1,25 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: telegram
+    receivers:
+      - uid: telegram
+        type: telegram
+        disableResolveMessage: false
+        settings:
+          bottoken: ${TELEGRAM_BOT_TOKEN}
+          # Fixo aqui: o Grafana converte "${VAR}" numérico em número e recusa o chat id.
+          chatid: "1471597086"
+          parse_mode: None
+          disable_web_page_preview: true
+          message: |-
+            {{ range .Alerts }}{{ if eq .Status "firing" }}🔴{{ else }}✅ resolvido:{{ end }} [{{ .Labels.servidor }}] {{ .Annotations.summary }}
+            {{ end }}
+
+policies:
+  - orgId: 1
+    receiver: telegram
+    group_by: ["alertname", "servidor"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
