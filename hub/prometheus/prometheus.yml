@@ -1,0 +1,11 @@
+# As métricas chegam por remote_write dos agentes (Grafana Alloy); aqui só o
+# próprio Prometheus é coletado. Os alertas ficam no Grafana.
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          servidor: hub

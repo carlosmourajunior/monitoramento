@@ -1,0 +1,155 @@
+// Agente de monitoramento. Tudo sai com o rótulo servidor=$SERVIDOR.
+
+// ─── Envio para o hub ─────────────────────────────────────────────
+prometheus.remote_write "hub" {
+  endpoint {
+    url = sys.env("HUB_URL") + "/api/v1/write"
+    basic_auth {
+      username = sys.env("INGEST_USER")
+      password = sys.env("INGEST_PASSWORD")
+    }
+  }
+  external_labels = { servidor = sys.env("SERVIDOR") }
+}
+
+loki.write "hub" {
+  endpoint {
+    url = sys.env("HUB_URL") + "/loki/api/v1/push"
+    basic_auth {
+      username = sys.env("INGEST_USER")
+      password = sys.env("INGEST_PASSWORD")
+    }
+  }
+  external_labels = { servidor = sys.env("SERVIDOR") }
+}
+
+// ─── Servidor: CPU, memória, disco, rede ──────────────────────────
+prometheus.exporter.unix "host" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/host/root"
+
+  filesystem {
+    mount_points_exclude = "^/(dev|proc|run|sys|host|var/lib/docker/.+)($|/)"
+    fs_types_exclude     = "^(autofs|binfmt_misc|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|pstore|rpc_pipefs|securityfs|squashfs|sysfs|tmpfs|tracefs)$"
+  }
+}
+
+// Os exporters embutidos vêm com job="integrations/..."; troca por nomes curtos.
+discovery.relabel "host" {
+  targets = prometheus.exporter.unix.host.targets
+  rule {
+    target_label = "job"
+    replacement  = "host"
+  }
+}
+
+prometheus.scrape "host" {
+  targets         = discovery.relabel.host.output
+  job_name        = "host"
+  scrape_interval = "30s"
+  forward_to      = [prometheus.remote_write.hub.receiver]
+}
+
+// ─── Containers: CPU, memória, rede por container ─────────────────
+prometheus.exporter.cadvisor "docker" {
+  docker_host      = "unix:///var/run/docker.sock"
+  docker_only      = true
+  storage_duration = "5m"
+}
+
+discovery.relabel "cadvisor" {
+  targets = prometheus.exporter.cadvisor.docker.targets
+  rule {
+    target_label = "job"
+    replacement  = "containers"
+  }
+}
+
+prometheus.scrape "containers" {
+  targets         = discovery.relabel.cadvisor.output
+  job_name        = "containers"
+  scrape_interval = "30s"
+  forward_to      = [prometheus.relabel.containers.receiver]
+}
+
+// Só as métricas usadas no painel e nos alertas (cAdvisor gera muitas).
+prometheus.relabel "containers" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "container_(cpu_usage_seconds_total|memory_working_set_bytes|network_(receive|transmit)_bytes_total|last_seen|start_time_seconds)|up|scrape_.*"
+    action        = "keep"
+  }
+  forward_to = [prometheus.remote_write.hub.receiver]
+}
+
+// ─── CrowdSec (se instalado; sem ele, só fica up=0) ───────────────
+prometheus.scrape "crowdsec" {
+  targets         = [{ "__address__" = "127.0.0.1:6060" }]
+  job_name        = "crowdsec"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.remote_write.hub.receiver]
+}
+
+// ─── Logs dos containers ──────────────────────────────────────────
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "projeto"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.acesso.receiver]
+}
+
+// Logs de acesso HTTP: extrai o status como rótulo (para contar 2xx/4xx/5xx
+// por site e alertar em 5xx). Caminho e IP ficam no texto, consultados no painel.
+loki.process "acesso" {
+  // nginx (formato combined): ... "GET /api/x HTTP/1.1" 200 ...
+  stage.regex {
+    expression = "\"[A-Z]+ \\S+ HTTP/[0-9.]+\" (?P<status>[1-5][0-9][0-9]) "
+  }
+  // Caddy (JSON): ..."status":200...
+  stage.regex {
+    expression = "\"status\":(?P<status_caddy>[1-5][0-9][0-9])"
+  }
+  stage.template {
+    source   = "status"
+    template = "{{ with .status }}{{ . }}{{ else }}{{ with .status_caddy }}{{ . }}{{ end }}{{ end }}"
+  }
+  stage.labels {
+    values = { status = "" }
+  }
+  forward_to = [loki.write.hub.receiver]
+}
+
+// ─── SSH (journald) ───────────────────────────────────────────────
+loki.relabel "journal" {
+  forward_to = []
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+}
+
+loki.source.journal "ssh" {
+  matches       = "_SYSTEMD_UNIT=ssh.service"
+  relabel_rules = loki.relabel.journal.rules
+  labels        = { job = "ssh" }
+  forward_to    = [loki.write.hub.receiver]
+}

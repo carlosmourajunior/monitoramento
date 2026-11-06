@@ -1,0 +1,97 @@
+# Hub de monitoramento: recebe métricas e logs dos agentes de todos os servidores.
+#
+#   cp .env.example .env   # e preencha
+#   docker compose up -d
+#
+# Nenhuma porta é publicada na internet. O acesso entra pelo túnel Cloudflare
+# (serviço cloudflared), configurado no painel Zero Trust com três hostnames:
+#   monitor.<domínio> -> http://grafana:3000      (painel, com login)
+#   status.<domínio>  -> http://uptime-kuma:3001  (testes de disponibilidade)
+#   ingest.<domínio>  -> http://gateway:80        (entrada dos agentes, com senha)
+name: monitoramento
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${RETENCAO_METRICAS:-30d}
+      # Os agentes empurram as métricas (remote_write); o hub não precisa
+      # alcançar os servidores, que podem estar atrás de NAT.
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [mon]
+
+  loki:
+    image: grafana/loki:3.4.2
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    networks: [mon]
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    restart: unless-stopped
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_HOST:?defina GRAFANA_HOST no .env}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?defina GRAFANA_ADMIN_PASSWORD no .env}
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      # Usados pelo provisionamento dos alertas (grafana/provisioning/alerting)
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?defina TELEGRAM_BOT_TOKEN no .env}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on: [prometheus, loki]
+    networks: [mon]
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1.23.16
+    restart: unless-stopped
+    volumes:
+      - kuma_data:/app/data
+    networks: [mon]
+
+  # Porta de entrada dos agentes: exige usuário e senha e só deixa passar os
+  # dois caminhos de escrita (métricas e logs). Prometheus e Loki não têm
+  # autenticação própria, por isso nunca ficam expostos diretamente.
+  gateway:
+    image: caddy:2.9.1-alpine
+    restart: unless-stopped
+    environment:
+      INGEST_USER: ${INGEST_USER:-agente}
+      INGEST_PASSWORD_HASH: ${INGEST_PASSWORD_HASH:?defina INGEST_PASSWORD_HASH no .env}
+    volumes:
+      - ./gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on: [prometheus, loki]
+    networks: [mon]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?defina CLOUDFLARE_TUNNEL_TOKEN no .env}
+    depends_on: [grafana, uptime-kuma, gateway]
+    networks: [mon]
+
+networks:
+  mon:
+
+volumes:
+  prometheus_data:
+  loki_data:
+  grafana_data:
+  kuma_data:

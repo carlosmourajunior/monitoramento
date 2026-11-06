@@ -1,0 +1,44 @@
+# Agente de monitoramento (Grafana Alloy): um por servidor.
+#
+#   cp .env.example .env   # e preencha
+#   docker compose up -d
+#
+# Coleta métricas do servidor e dos containers, os logs de todos os containers
+# e o log do SSH, e as métricas do CrowdSec, e empurra tudo para o hub.
+# Não abre nenhuma porta (a interface do Alloy fica só em 127.0.0.1:12345).
+name: monitoramento-agente
+
+services:
+  alloy:
+    image: grafana/alloy:v1.7.5
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    # Rede e PID do host: vê as interfaces reais e alcança o CrowdSec em
+    # 127.0.0.1:6060 sem publicar nada.
+    network_mode: host
+    pid: host
+    privileged: true
+    environment:
+      SERVIDOR: ${SERVIDOR:?defina SERVIDOR no .env}
+      HUB_URL: ${HUB_URL:?defina HUB_URL no .env}
+      INGEST_USER: ${INGEST_USER:-agente}
+      INGEST_PASSWORD: ${INGEST_PASSWORD:?defina INGEST_PASSWORD no .env}
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+      - /:/host/root:ro,rslave
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+
+volumes:
+  alloy_data:

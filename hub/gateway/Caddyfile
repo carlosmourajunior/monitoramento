@@ -1,0 +1,21 @@
+# Entrada dos agentes, atrás do túnel Cloudflare (o TLS termina na Cloudflare).
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	basic_auth {
+		{$INGEST_USER} {$INGEST_PASSWORD_HASH}
+	}
+
+	handle /api/v1/write {
+		reverse_proxy prometheus:9090
+	}
+	handle /loki/api/v1/push {
+		reverse_proxy loki:3100
+	}
+	handle {
+		respond 404
+	}
+}
