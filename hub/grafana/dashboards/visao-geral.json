@@ -625,7 +625,7 @@
   {
    "id": 13,
    "type": "table",
-   "title": "Containers reiniciados recentemente (início do processo)",
+   "title": "Containers reiniciados nas últimas 24 h",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -668,7 +668,7 @@
        "Time": true
       },
       "renameByName": {
-       "Value": "Total",
+       "Value": "Ligado há",
        "Value #A": "Total",
        "container": "Container",
        "path": "Endpoint",
@@ -684,15 +684,18 @@
      "options": {
       "sort": [
        {
-        "field": "Total",
-        "desc": true
+        "field": "Ligado há",
+        "desc": false
        }
       ]
      }
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "unit": "s",
+     "decimals": 0
+    },
     "overrides": []
    },
    "options": {
@@ -840,7 +843,7 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "topk(15, sum by (container, path) (count_over_time({status=~\".+\",servidor=~\"$servidor\"} |~ \"HTTP/[0-9.]+\\\" \" | pattern `<_> \"<method> <path> <_>\" <_>` | label_format path=`{{ regexReplaceAll \"[0-9]+\" (regexReplaceAll \"\\\\?.*\" .path \"\") \":id\" }}` [$__range])))",
+     "expr": "topk(15, sum by (container, path) (count_over_time({status=~\".+\",servidor=~\"$servidor\"} |~ \"HTTP/[0-9.]+\\\" \" | pattern `<_> \"<method> <path> <_>\" <_>` | label_format path=`{{ regexReplaceAll \"[0-9]+\" (regexReplaceAll \"\\\\?.*\" .path \"\") \":id\" }}` | path!~\"/(api/)?health/?\" [$__range])))",
      "instant": true,
      "queryType": "instant",
      "legendFormat": ""
@@ -894,7 +897,8 @@
    "options": {
     "showHeader": true,
     "cellHeight": "sm"
-   }
+   },
+   "description": "Sem os healthchecks (/health, /api/health/), que são o Docker conferindo se o container está vivo."
   },
   {
    "id": 18,
@@ -917,7 +921,7 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "topk(15, sum by (container, path) (count_over_time({status=~\".+\",servidor=~\"$servidor\"} | json path=\"request.uri\" | path!=\"\" | label_format path=`{{ regexReplaceAll \"[0-9]+\" (regexReplaceAll \"\\\\?.*\" .path \"\") \":id\" }}` [$__range])))",
+     "expr": "topk(15, sum by (container, path) (count_over_time({status=~\".+\",servidor=~\"$servidor\"} | json path=\"request.uri\" | path!=\"\" | label_format path=`{{ regexReplaceAll \"[0-9]+\" (regexReplaceAll \"\\\\?.*\" .path \"\") \":id\" }}` | path!~\"/(api/)?health/?\" [$__range])))",
      "instant": true,
      "queryType": "instant",
      "legendFormat": ""
@@ -971,7 +975,8 @@
    "options": {
     "showHeader": true,
     "cellHeight": "sm"
-   }
+   },
+   "description": "Sem os healthchecks (/health, /api/health/), que são o Docker conferindo se o container está vivo."
   },
   {
    "id": 19,
