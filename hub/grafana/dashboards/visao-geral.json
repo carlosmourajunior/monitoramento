@@ -255,7 +255,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "sum by (servidor) (cs_active_decisions{servidor=~\"$servidor\"})",
+     "expr": "sum by (servidor) (cs_active_decisions{servidor=~\"$servidor\"}) or (max by (servidor) (up{job=\"crowdsec\",servidor=~\"$servidor\"}) == 1) * 0",
      "legendFormat": "{{servidor}}",
      "instant": true
     }
@@ -284,7 +284,8 @@
     "colorMode": "background",
     "textMode": "value_and_name",
     "graphMode": "none"
-   }
+   },
+   "description": "IPs com bloqueio ativo agora. 0 = CrowdSec rodando sem bloqueios; sem dado = CrowdSec não instalado ou parado."
   },
   {
    "id": 6,
