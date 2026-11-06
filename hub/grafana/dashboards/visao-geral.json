@@ -646,28 +646,36 @@
      "expr": "sort_desc(time() - max by (servidor, name) (container_start_time_seconds{name!=\"\",servidor=~\"$servidor\"}) < 86400)",
      "instant": true,
      "queryType": "instant",
-     "legendFormat": ""
+     "legendFormat": "",
+     "format": "table"
     }
    ],
    "transformations": [
     {
-     "id": "reduce",
+     "id": "labelsToFields",
      "options": {
-      "reducers": [
-       "lastNotNull"
-      ],
-      "labelsToFields": true
+      "mode": "columns"
      }
+    },
+    {
+     "id": "merge",
+     "options": {}
     },
     {
      "id": "organize",
      "options": {
       "excludeByName": {
-       "Field": true
+       "Time": true
       },
       "renameByName": {
-       "Last *": "Total",
-       "Last": "Total"
+       "Value": "Total",
+       "Value #A": "Total",
+       "container": "Container",
+       "path": "Endpoint",
+       "ip": "IP",
+       "status": "Status",
+       "servidor": "Servidor",
+       "name": "Container"
       }
      }
     },
@@ -688,7 +696,8 @@
     "overrides": []
    },
    "options": {
-    "showHeader": true
+    "showHeader": true,
+    "cellHeight": "sm"
    }
   },
   {
@@ -839,23 +848,30 @@
    ],
    "transformations": [
     {
-     "id": "reduce",
+     "id": "labelsToFields",
      "options": {
-      "reducers": [
-       "lastNotNull"
-      ],
-      "labelsToFields": true
+      "mode": "columns"
      }
+    },
+    {
+     "id": "merge",
+     "options": {}
     },
     {
      "id": "organize",
      "options": {
       "excludeByName": {
-       "Field": true
+       "Time": true
       },
       "renameByName": {
-       "Last *": "Total",
-       "Last": "Total"
+       "Value": "Total",
+       "Value #A": "Total",
+       "container": "Container",
+       "path": "Endpoint",
+       "ip": "IP",
+       "status": "Status",
+       "servidor": "Servidor",
+       "name": "Container"
       }
      }
     },
@@ -876,7 +892,8 @@
     "overrides": []
    },
    "options": {
-    "showHeader": true
+    "showHeader": true,
+    "cellHeight": "sm"
    }
   },
   {
@@ -908,23 +925,30 @@
    ],
    "transformations": [
     {
-     "id": "reduce",
+     "id": "labelsToFields",
      "options": {
-      "reducers": [
-       "lastNotNull"
-      ],
-      "labelsToFields": true
+      "mode": "columns"
      }
+    },
+    {
+     "id": "merge",
+     "options": {}
     },
     {
      "id": "organize",
      "options": {
       "excludeByName": {
-       "Field": true
+       "Time": true
       },
       "renameByName": {
-       "Last *": "Total",
-       "Last": "Total"
+       "Value": "Total",
+       "Value #A": "Total",
+       "container": "Container",
+       "path": "Endpoint",
+       "ip": "IP",
+       "status": "Status",
+       "servidor": "Servidor",
+       "name": "Container"
       }
      }
     },
@@ -945,13 +969,14 @@
     "overrides": []
    },
    "options": {
-    "showHeader": true
+    "showHeader": true,
+    "cellHeight": "sm"
    }
   },
   {
    "id": 19,
    "type": "table",
-   "title": "Quem mais usa a API do ISP (IP)",
+   "title": "Quem mais usa a API do ISP (IP e status)",
    "datasource": {
     "type": "loki",
     "uid": "loki"
@@ -969,7 +994,7 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "topk(15, sum by (ip) (count_over_time({status=~\".+\",servidor=~\"$servidor\"} | json ip=\"request.client_ip\", uri=\"request.uri\" | uri=~\"/api/.*\" [$__range])))",
+     "expr": "topk(20, sum by (ip, status) (count_over_time({status=~\".+\",servidor=~\"$servidor\"} | json ip=\"request.client_ip\", uri=\"request.uri\" | uri=~\"/api/.*\" [$__range])))",
      "instant": true,
      "queryType": "instant",
      "legendFormat": ""
@@ -977,23 +1002,30 @@
    ],
    "transformations": [
     {
-     "id": "reduce",
+     "id": "labelsToFields",
      "options": {
-      "reducers": [
-       "lastNotNull"
-      ],
-      "labelsToFields": true
+      "mode": "columns"
      }
+    },
+    {
+     "id": "merge",
+     "options": {}
     },
     {
      "id": "organize",
      "options": {
       "excludeByName": {
-       "Field": true
+       "Time": true
       },
       "renameByName": {
-       "Last *": "Total",
-       "Last": "Total"
+       "Value": "Total",
+       "Value #A": "Total",
+       "container": "Container",
+       "path": "Endpoint",
+       "ip": "IP",
+       "status": "Status",
+       "servidor": "Servidor",
+       "name": "Container"
       }
      }
     },
@@ -1014,8 +1046,10 @@
     "overrides": []
    },
    "options": {
-    "showHeader": true
-   }
+    "showHeader": true,
+    "cellHeight": "sm"
+   },
+   "description": "Status 308 = chegou por HTTP e foi só redirecionado para HTTPS, não chegou na API. 401/403 = barrado pela autenticação ou pela lista de IPs."
   },
   {
    "id": 20,
@@ -1046,23 +1080,30 @@
    ],
    "transformations": [
     {
-     "id": "reduce",
+     "id": "labelsToFields",
      "options": {
-      "reducers": [
-       "lastNotNull"
-      ],
-      "labelsToFields": true
+      "mode": "columns"
      }
+    },
+    {
+     "id": "merge",
+     "options": {}
     },
     {
      "id": "organize",
      "options": {
       "excludeByName": {
-       "Field": true
+       "Time": true
       },
       "renameByName": {
-       "Last *": "Total",
-       "Last": "Total"
+       "Value": "Total",
+       "Value #A": "Total",
+       "container": "Container",
+       "path": "Endpoint",
+       "ip": "IP",
+       "status": "Status",
+       "servidor": "Servidor",
+       "name": "Container"
       }
      }
     },
@@ -1083,7 +1124,8 @@
     "overrides": []
    },
    "options": {
-    "showHeader": true
+    "showHeader": true,
+    "cellHeight": "sm"
    }
   },
   {
@@ -1120,7 +1162,7 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "{servidor=~\"$servidor\"} |= \"ALERTA\""
+     "expr": "{servidor=~\"$servidor\", projeto!~\"monitoramento.*\"} |= \"ALERTA\""
     }
    ],
    "options": {

@@ -21,6 +21,10 @@ services:
     # 127.0.0.1:6060 sem publicar nada.
     network_mode: host
     pid: host
+    # Sem isso, no cgroup v2 (Debian 12/13) o container só enxerga o próprio
+    # cgroup e o cAdvisor não acha nenhum container: CPU/memória por container
+    # ficam "No data".
+    cgroup: host
     privileged: true
     environment:
       SERVIDOR: ${SERVIDOR:?defina SERVIDOR no .env}
